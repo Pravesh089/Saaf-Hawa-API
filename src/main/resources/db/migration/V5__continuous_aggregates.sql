@@ -36,7 +36,7 @@ SELECT add_continuous_aggregate_policy('measurement_daily',
     schedule_interval => INTERVAL '1 hour');
 
 SELECT add_continuous_aggregate_policy('measurement_monthly',
-    start_offset => INTERVAL '2 months', end_offset => INTERVAL '1 day',
+    start_offset => INTERVAL '3 months', end_offset => INTERVAL '1 day',
     schedule_interval => INTERVAL '6 hours');
 
 -- Compress raw chunks older than 30 days (disk-growth mitigation, FDD §12).
