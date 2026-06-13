@@ -14,7 +14,7 @@ SELECT station_id,
        sum(CASE WHEN qc_flags = 0 THEN 1 ELSE 0 END) AS unflagged_cnt
 FROM measurement
 GROUP BY station_id, pollutant, bucket
-WITH NO DATA;
+    WITH NO DATA;
 
 CREATE MATERIALIZED VIEW measurement_monthly
 WITH (timescaledb.continuous) AS
@@ -23,6 +23,9 @@ SELECT station_id,
        time_bucket(INTERVAL '1 month', interval_start) AS bucket,
        avg(value)  AS mean_value,
        min(value)  AS min_value,
+       1.7 KB
+
+    The good news: the app got almost all the way — it connected, ran migrations V1–V4 successfully (the hypertable was created, your data layer is sound), and only tripped on that one policy line in V5. Here's how to finish:
        max(value)  AS max_value,
        count(value) AS cnt,
        sum(CASE WHEN qc_flags = 0 THEN 1 ELSE 0 END) AS unflagged_cnt
@@ -36,7 +39,7 @@ SELECT add_continuous_aggregate_policy('measurement_daily',
     schedule_interval => INTERVAL '1 hour');
 
 SELECT add_continuous_aggregate_policy('measurement_monthly',
-    start_offset => INTERVAL '2 months', end_offset => INTERVAL '1 day',
+    start_offset => INTERVAL '3 months', end_offset => INTERVAL '1 day',
     schedule_interval => INTERVAL '6 hours');
 
 -- Compress raw chunks older than 30 days (disk-growth mitigation, FDD §12).
