@@ -5,3 +5,5 @@ data/
 *.iml
 .vscode/
 .DS_Store
+.env
+deploy/.env

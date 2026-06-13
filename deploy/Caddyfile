@@ -1,0 +1,8 @@
+# Caddy reverse proxy for automatic HTTPS (used only when you have a domain).
+# Replace api.example.com with your real domain, then follow the steps in
+# deploy/docker-compose.prod.yml to enable the caddy service. Caddy fetches and
+# renews a free Let's Encrypt certificate automatically.
+
+api.example.com {
+    reverse_proxy app:8080
+}

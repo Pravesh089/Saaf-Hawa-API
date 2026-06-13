@@ -1,0 +1,84 @@
+# Production deployment — single VPS with Docker Compose
+# Run from the deploy/ directory:  docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+# (build context is the repo root, one level up)
+
+services:
+  db:
+    image: timescale/timescaledb-ha:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - dbdata:/home/postgres/pgdata/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    # No published ports: the database is only reachable inside the compose network.
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY}
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    # Console (9001) intentionally not published. Tunnel via SSH if you need it.
+
+  app:
+    build: ..
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      ARCHIVE_TYPE: s3
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_BUCKET: ${S3_BUCKET}
+      SAAFHAWA_ADMIN_TOKEN: ${SAAFHAWA_ADMIN_TOKEN}
+      DATAGOVIN_API_KEY: ${DATAGOVIN_API_KEY}
+      CONTACT_URL: ${CONTACT_URL}
+    # Until you add a domain, expose the API directly on port 80.
+    # When you add a domain + HTTPS, remove this and let Caddy (below) proxy it.
+    ports:
+      - "80:8080"
+
+  # --- Optional: HTTPS via Caddy once you have a domain ---------------------
+  # 1. Point your domain's A record at the server's IP.
+  # 2. Put your domain in deploy/Caddyfile.
+  # 3. Remove the app "ports" mapping above, uncomment this service, and re-run.
+  #
+  # caddy:
+  #   image: caddy:2
+  #   restart: unless-stopped
+  #   depends_on: [app]
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./Caddyfile:/etc/caddy/Caddyfile:ro
+  #     - caddydata:/data
+  #     - caddyconfig:/config
+
+volumes:
+  dbdata:
+  miniodata:
+  # caddydata:
+  # caddyconfig:
