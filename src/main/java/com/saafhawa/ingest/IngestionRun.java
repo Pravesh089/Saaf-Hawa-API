@@ -6,8 +6,11 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
+import java.util.List;
 
 /** Operational ledger row: one execution of one adapter (§4.1, FR-1.2). */
 @Entity
@@ -36,8 +39,9 @@ public class IngestionRun {
     private String errorDetail;
     @Column(name = "raw_ref")
     private String rawRef;
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "reject_samples")
-    private String rejectSamples;
+    private List<String> rejectSamples;
 
     protected IngestionRun() {
     }
@@ -132,7 +136,7 @@ public class IngestionRun {
         this.rawRef = rawRef;
     }
 
-    public void setRejectSamples(String rejectSamples) {
+    public void setRejectSamples(List<String> rejectSamples) {
         this.rejectSamples = rejectSamples;
     }
 }
