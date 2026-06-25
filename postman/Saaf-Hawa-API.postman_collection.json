@@ -1,0 +1,414 @@
+{
+  "info": {
+    "_postman_id": "5a7f1c20-3b9e-4c2a-9d11-saafhawa00001",
+    "name": "Saaf Hawa API",
+    "description": "Production-ready collection for the Saaf Hawa air-quality API.\n\nSwitch between the **Saaf Hawa — Production** and **Saaf Hawa — Local** environments (top-right dropdown) to point at the deployed server or your laptop.\n\nVariables (set per environment):\n- baseUrl: API base, e.g. http://34.100.188.254 (prod) or http://localhost:8080 (local)\n- adminToken: value of SAAFHAWA_ADMIN_TOKEN (only needed for the Admin folder)\n- apiKey: optional API key for higher rate limits (enable the X-API-Key header where you want it)\n- city, station, pollutant, fromTs, toTs: convenience values used by example requests\n\nAuth model:\n- All /v1/** read endpoints are public (anonymous rate limit). Send X-API-Key for a higher limit.\n- All /admin/** endpoints require: Authorization: Bearer {{adminToken}}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.test('No server error (status < 500)', function () {",
+          "    pm.expect(pm.response.code).to.be.below(500);",
+          "});",
+          "pm.test('Responded within 5s', function () {",
+          "    pm.expect(pm.response.responseTime).to.be.below(5000);",
+          "});"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://34.100.188.254" },
+    { "key": "adminToken", "value": "" },
+    { "key": "apiKey", "value": "" },
+    { "key": "city", "value": "Delhi" },
+    { "key": "station", "value": "IN-DL-0001" },
+    { "key": "pollutant", "value": "PM2.5" },
+    { "key": "fromTs", "value": "2026-06-24T00:00:00Z" },
+    { "key": "toTs", "value": "2026-06-25T00:00:00Z" }
+  ],
+  "item": [
+    {
+      "name": "Ops & Status",
+      "item": [
+        {
+          "name": "GET /v1/status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "status"]
+            },
+            "description": "Service health + how many stations reported in the last 3h/24h."
+          }
+        },
+        {
+          "name": "GET /docs (Swagger UI)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/docs",
+              "host": ["{{baseUrl}}"],
+              "path": ["docs"]
+            },
+            "description": "Interactive API docs (HTML). Best opened in a browser."
+          }
+        },
+        {
+          "name": "GET /v3/api-docs (OpenAPI JSON)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v3/api-docs",
+              "host": ["{{baseUrl}}"],
+              "path": ["v3", "api-docs"]
+            },
+            "description": "Raw OpenAPI spec backing the Swagger UI."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Stations",
+      "item": [
+        {
+          "name": "GET /v1/stations (list / filter)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "X-API-Key", "value": "{{apiKey}}", "disabled": true }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/stations?city={{city}}&format=json",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "stations"],
+              "query": [
+                { "key": "state", "value": "", "disabled": true },
+                { "key": "city", "value": "{{city}}" },
+                { "key": "bbox", "value": "76.8,28.4,77.4,28.9", "disabled": true },
+                { "key": "format", "value": "json" }
+              ]
+            },
+            "description": "List stations. Filter by state, city, or bbox (minLon,minLat,maxLon,maxLat). format=json|csv."
+          }
+        },
+        {
+          "name": "GET /v1/stations/{id}",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/stations/{{station}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "stations", "{{station}}"]
+            },
+            "description": "Single station by canonical id (e.g. IN-DL-0001)."
+          }
+        },
+        {
+          "name": "GET /v1/stations/nearest",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/stations/nearest?lat=28.61&lon=77.21&limit=5",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "stations", "nearest"],
+              "query": [
+                { "key": "lat", "value": "28.61" },
+                { "key": "lon", "value": "77.21" },
+                { "key": "limit", "value": "5" }
+              ]
+            },
+            "description": "Nearest stations to a lat/lon (PostGIS). Default limit 5."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Latest",
+      "item": [
+        {
+          "name": "GET /v1/latest?city",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "X-API-Key", "value": "{{apiKey}}", "disabled": true }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/latest?city={{city}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "latest"],
+              "query": [
+                { "key": "city", "value": "{{city}}" },
+                { "key": "station", "value": "{{station}}", "disabled": true }
+              ]
+            },
+            "description": "Most recent reading per pollutant. Filter by city OR station."
+          }
+        },
+        {
+          "name": "GET /v1/latest?station",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/latest?station={{station}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "latest"],
+              "query": [
+                { "key": "station", "value": "{{station}}" }
+              ]
+            },
+            "description": "Latest readings for a single station."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Measurements",
+      "item": [
+        {
+          "name": "GET /v1/measurements (raw)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "X-API-Key", "value": "{{apiKey}}", "disabled": true }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/measurements?city={{city}}&pollutant={{pollutant}}&from={{fromTs}}&to={{toTs}}&interval=raw&format=json",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "measurements"],
+              "query": [
+                { "key": "station", "value": "{{station}}", "disabled": true },
+                { "key": "city", "value": "{{city}}" },
+                { "key": "pollutant", "value": "{{pollutant}}" },
+                { "key": "from", "value": "{{fromTs}}" },
+                { "key": "to", "value": "{{toTs}}" },
+                { "key": "interval", "value": "raw" },
+                { "key": "include_flagged", "value": "true", "disabled": true },
+                { "key": "format", "value": "json" },
+                { "key": "cursor", "value": "", "disabled": true },
+                { "key": "limit", "value": "100", "disabled": true }
+              ]
+            },
+            "description": "Time-series readings. from/to are ISO-8601 instants (UTC). interval=raw|hour|day. include_flagged=true to include QC-flagged rows. Use cursor for pagination."
+          }
+        },
+        {
+          "name": "GET /v1/measurements (daily)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/measurements?city={{city}}&pollutant={{pollutant}}&from={{fromTs}}&to={{toTs}}&interval=day",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "measurements"],
+              "query": [
+                { "key": "city", "value": "{{city}}" },
+                { "key": "pollutant", "value": "{{pollutant}}" },
+                { "key": "from", "value": "{{fromTs}}" },
+                { "key": "to", "value": "{{toTs}}" },
+                { "key": "interval", "value": "day" }
+              ]
+            },
+            "description": "Daily-aggregated series."
+          }
+        },
+        {
+          "name": "GET /v1/measurements (CSV)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/measurements?city={{city}}&pollutant={{pollutant}}&from={{fromTs}}&to={{toTs}}&format=csv",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "measurements"],
+              "query": [
+                { "key": "city", "value": "{{city}}" },
+                { "key": "pollutant", "value": "{{pollutant}}" },
+                { "key": "from", "value": "{{fromTs}}" },
+                { "key": "to", "value": "{{toTs}}" },
+                { "key": "format", "value": "csv" }
+              ]
+            },
+            "description": "Same data as CSV (good for spreadsheets)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "AQI",
+      "item": [
+        {
+          "name": "GET /v1/aqi/cities",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/aqi/cities",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "aqi", "cities"]
+            },
+            "description": "Latest computed CPCB AQI for all cities."
+          }
+        },
+        {
+          "name": "GET /v1/aqi/cities/{city}",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/aqi/cities/{{city}}?from={{fromTs}}&to={{toTs}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "aqi", "cities", "{{city}}"],
+              "query": [
+                { "key": "from", "value": "{{fromTs}}" },
+                { "key": "to", "value": "{{toTs}}" }
+              ]
+            },
+            "description": "Daily AQI history for one city over a date range."
+          }
+        }
+      ]
+    },
+    {
+      "name": "QC",
+      "item": [
+        {
+          "name": "GET /v1/qc/methodology",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/qc/methodology",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "qc", "methodology"]
+            },
+            "description": "Human-readable (Markdown) description of the QC rules and flags."
+          }
+        }
+      ]
+    },
+    {
+      "name": "API Keys",
+      "item": [
+        {
+          "name": "POST /v1/keys (sign up)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"you@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/keys",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "keys"]
+            },
+            "description": "Self-serve API key. The key is returned ONCE in the response; store it and send it as X-API-Key for a higher rate limit."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin (Bearer token required)",
+      "item": [
+        {
+          "name": "POST /admin/ingest/cpcb-datagovin (now)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/ingest/cpcb-datagovin",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "ingest", "cpcb-datagovin"]
+            },
+            "description": "Trigger an immediate fetch of the latest CPCB snapshot."
+          }
+        },
+        {
+          "name": "POST /admin/ingest/{source} (window backfill)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/ingest/cpcb-datagovin?from={{fromTs}}&to={{toTs}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "ingest", "cpcb-datagovin"],
+              "query": [
+                { "key": "from", "value": "{{fromTs}}" },
+                { "key": "to", "value": "{{toTs}}" }
+              ]
+            },
+            "description": "Run an adapter over a specific historical window (from/to ISO instants)."
+          }
+        },
+        {
+          "name": "POST /admin/stations/merge",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/stations/merge?from=IN-DL-9999&into=IN-DL-0001",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "stations", "merge"],
+              "query": [
+                { "key": "from", "value": "IN-DL-9999" },
+                { "key": "into", "value": "IN-DL-0001" }
+              ]
+            },
+            "description": "Merge a duplicate station into a canonical one. Edit the from/into ids before sending."
+          }
+        },
+        {
+          "name": "POST /admin/qc/reload",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/qc/reload",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "qc", "reload"]
+            },
+            "description": "Reload QC config from the database without restarting the app."
+          }
+        },
+        {
+          "name": "POST /admin/keys/{id}/revoke",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/keys/1/revoke",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "keys", "1", "revoke"]
+            },
+            "description": "Revoke an issued API key by its numeric id."
+          }
+        }
+      ]
+    }
+  ]
+}
