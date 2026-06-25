@@ -98,7 +98,7 @@ public class AdapterRunner {
             }
             run.setInserted(inserted);
             run.setDuplicate(duplicate);
-            run.setRejectSamples(objectMapper.writeValueAsString(parsed.rejectSamples()));
+            run.setRejectSamples(parsed.rejectSamples());
             run.setOutcome(parsed.rejected() > 0 ? "PARTIAL" : "SUCCESS");
             log.info("Run {} done: fetched={} inserted={} duplicate={} rejected={}",
                     run.getId(), parsed.fetched(), inserted, duplicate, parsed.rejected());
