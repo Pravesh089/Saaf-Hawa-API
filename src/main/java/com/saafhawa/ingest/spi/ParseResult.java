@@ -13,12 +13,17 @@ public class ParseResult {
     private static final int MAX_REJECT_SAMPLES = 50;
 
     private final List<CanonicalMeasurement> measurements = new ArrayList<>();
+    private final List<CityBulletinRow> cityBulletins = new ArrayList<>();
     private final List<String> rejectSamples = new ArrayList<>();
     private int fetched;
     private int rejected;
 
     public void add(CanonicalMeasurement m) {
         measurements.add(m);
+    }
+
+    public void add(CityBulletinRow c) {
+        cityBulletins.add(c);
     }
 
     public void countFetched() {
@@ -34,6 +39,10 @@ public class ParseResult {
 
     public List<CanonicalMeasurement> measurements() {
         return measurements;
+    }
+
+    public List<CityBulletinRow> cityBulletins() {
+        return cityBulletins;
     }
 
     public List<String> rejectSamples() {

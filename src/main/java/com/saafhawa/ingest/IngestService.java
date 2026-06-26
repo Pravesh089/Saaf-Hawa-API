@@ -9,6 +9,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -55,5 +57,24 @@ public class IngestService {
         }
         log.info("Scheduled data.gov.in poll starting");
         runner.run(adapter, IngestionWindow.lastHours(1));
+    }
+
+    /**
+     * Weekly refresh of the current calendar year's urbanemissions bulletin file (§5.2). The
+     * upstream dump updates sporadically, so a low-frequency poll is enough; full historical
+     * backfill across all years is triggered separately via the admin endpoint (FR-1.5).
+     */
+    @Scheduled(cron = "${saafhawa.ingest.urbanemissions.cron:0 0 3 * * MON}")
+    @SchedulerLock(name = "ingest-urbanemissions", lockAtMostFor = "30m", lockAtLeastFor = "1m")
+    public void pollUrbanEmissions() {
+        SourceAdapter adapter = adaptersById.get("urbanemissions");
+        if (adapter == null) {
+            return;
+        }
+        log.info("Scheduled urbanemissions bulletin refresh starting");
+        Instant now = Instant.now();
+        Instant startOfYear = now.atZone(ZoneOffset.UTC).withDayOfYear(1)
+                .toLocalDate().atStartOfDay(ZoneOffset.UTC).toInstant();
+        runner.run(adapter, new IngestionWindow(startOfYear, now));
     }
 }

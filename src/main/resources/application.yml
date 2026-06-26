@@ -61,3 +61,8 @@ saafhawa:
       page-size: ${DATAGOVIN_PAGE_SIZE:1000}
       max-pages: ${DATAGOVIN_MAX_PAGES:20}
       cron: ${DATAGOVIN_CRON:0 5 * * * *}
+    urbanemissions:
+      enabled: ${URBANEMISSIONS_ENABLED:true}
+      base-url: ${URBANEMISSIONS_BASE_URL:https://raw.githubusercontent.com/urbanemissionsinfo/AQI_bulletins/main/data/Processed}
+      start-year: ${URBANEMISSIONS_START_YEAR:2015}
+      cron: ${URBANEMISSIONS_CRON:0 0 3 * * MON}
