@@ -5,6 +5,7 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 import java.sql.Timestamp;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 
@@ -25,6 +26,11 @@ public class MeasurementRepository {
     public record Upsert(String stationId, String pollutant, Instant intervalStart, int intervalSeconds,
                          Double value, Double valueMin, Double valueMax, String source, String rawRef,
                          int qcFlags, String qcRuleset, Integer reportedAqi) {
+    }
+
+    /** Trailing 8h and 24h means (with hour-counts) for one (station, pollutant). */
+    public record WindowedAvgRow(String stationId, String pollutant,
+                                 Double avg8, int cnt8, Double avg24, int cnt24, Instant lastSeen) {
     }
 
     /**
@@ -136,6 +142,43 @@ public class MeasurementRepository {
                 rs.getString("station_id"), rs.getString("pollutant"),
                 rs.getTimestamp("interval_start").toInstant(), (Double) rs.getObject("value"),
                 rs.getString("source"), rs.getInt("qc_flags")));
+    }
+
+    /**
+     * Trailing-window mean concentration per (station, pollutant) for CPCB-method AQI (§4.2).
+     * For each pair we return both the 8-hour and 24-hour means with their hour-counts, so the
+     * caller can pick the window CPCB prescribes for that pollutant (8h for CO/O3, 24h otherwise)
+     * and enforce a minimum-completeness rule. Values carrying any QC flag in {@code rejectMask}
+     * (and nulls) are excluded from the averages.
+     */
+    public List<WindowedAvgRow> trailingAverages(List<String> stations, Instant now, int rejectMask) {
+        if (stations.isEmpty()) {
+            return List.of();
+        }
+        String sql = """
+                SELECT station_id, pollutant,
+                       avg(value)   FILTER (WHERE interval_start >= :since8)  AS avg8,
+                       count(value) FILTER (WHERE interval_start >= :since8)  AS cnt8,
+                       avg(value)   AS avg24,
+                       count(value) AS cnt24,
+                       max(interval_start) AS last_seen
+                FROM measurement
+                WHERE station_id IN (:stations)
+                  AND interval_start >= :since24
+                  AND value IS NOT NULL
+                  AND (qc_flags & :rejectMask) = 0
+                GROUP BY station_id, pollutant
+                """;
+        MapSqlParameterSource p = new MapSqlParameterSource()
+                .addValue("stations", stations)
+                .addValue("since24", Timestamp.from(now.minus(Duration.ofHours(24))))
+                .addValue("since8", Timestamp.from(now.minus(Duration.ofHours(8))))
+                .addValue("rejectMask", rejectMask);
+        return jdbc.query(sql, p, (rs, i) -> new WindowedAvgRow(
+                rs.getString("station_id"), rs.getString("pollutant"),
+                (Double) rs.getObject("avg8"), rs.getInt("cnt8"),
+                (Double) rs.getObject("avg24"), rs.getInt("cnt24"),
+                rs.getTimestamp("last_seen").toInstant()));
     }
 
     /** Distinct stations reporting any measurement since the given instant (FR-7.2). */
