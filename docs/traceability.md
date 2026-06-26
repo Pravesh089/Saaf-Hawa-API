@@ -21,7 +21,7 @@ Status legend: ✅ implemented (M1) · 🟡 partial (boundary in place) · ⏳ d
 | FR-4.2 | `GET /v1/stations/{id}` | ✅ | `api.StationController` |
 | FR-4.3 | `GET /v1/stations/nearest` (PostGIS) | ✅ | `api.StationController` |
 | FR-4.4 | `GET /v1/measurements` + interval/format/caps/cursor | ✅ raw+day/month; csv+json | `api.MeasurementController` |
-| FR-4.5 | `GET /v1/aqi/cities` (bulletin + computed) | 🟡 bulletin layer; computed M3 | `api.AqiController` |
+| FR-4.5 | AQI: station-computed + city bulletin | ✅ station-computed (`GET /v1/aqi/stations`, all-pollutant CPCB sub-index); 🟡 city bulletin backfill pending | `api.AqiController`, `aqi.AqiService` |
 | FR-4.6 | `GET /v1/latest` + age-in-minutes | ✅ | `api.LatestController` |
 | FR-4.7 | Stable sort, cursor pagination, Cache-Control | ✅ | controllers + `CacheControl` |
 | FR-5.1/5.2 | Bulk export + Parquet snapshots | ⏳ M3 | `export` package boundary only |
