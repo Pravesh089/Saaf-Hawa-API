@@ -1,0 +1,6 @@
+date,City,No. Stations,Air Quality,Index Value,Prominent Pollutant
+2025-07-01,Solapur,2,Good,38,PM10
+2025-07-01,Mumbai,28,Satisfactory,53,"PM10, PM2.5"
+2025-07-01,Nagpur,4,Good,47,"CO, PM10"
+2025-07-01,Unknown City,1,NA,NA,NA
+2025-07-02,Mumbai,29,Satisfactory,55,PM2.5
