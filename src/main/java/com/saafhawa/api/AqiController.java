@@ -30,8 +30,10 @@ import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * AQI endpoints (FR-4.5).
@@ -143,6 +145,7 @@ public class AqiController {
                 : "AQI by the CPCB method: trailing 24-hour mean per pollutant (8-hour for CO/O3), "
                         + "max sub-index across pollutants. Needs ≥" + MIN_HOURS_24 + "h (≥" + MIN_HOURS_8
                         + "h for 8-hour pollutants); 'valid' needs ≥3 sub-indices including PM2.5/PM10. "
+                        + "Stations short on history fall back to latest readings (basis=latest-fallback). "
                         + "QC-flagged values excluded.";
         Meta meta = new Meta(List.of("cpcb-datagovin"), null, now,
                 "CPCB via data.gov.in; Saaf Hawa", null, note);
@@ -153,40 +156,40 @@ public class AqiController {
 
     /** Latest-reading basis: one most-recent value per pollutant. */
     private List<StationAqiDto> latestStations(List<String> stationIds, Instant now) {
-        Map<String, List<LatestRow>> byStation = new LinkedHashMap<>();
-        for (LatestRow r : measurements.latestForStations(stationIds)) {
-            byStation.computeIfAbsent(r.stationId(), k -> new ArrayList<>()).add(r);
-        }
-        List<StationAqiDto> out = new ArrayList<>(byStation.size());
-        for (var e : byStation.entrySet()) {
-            Map<String, Double> conc = new HashMap<>();
-            Instant seen = null;
-            for (LatestRow r : e.getValue()) {
-                if (r.value() == null || (r.qcFlags() & REJECT_MASK) != 0) {
-                    continue;
-                }
-                conc.put(r.pollutant(), r.value());
-                if (seen == null || r.intervalStart().isAfter(seen)) {
-                    seen = r.intervalStart();
-                }
-            }
-            out.add(toResult(e.getKey(), conc, seen, now, "latest"));
+        Map<String, Instant> seen = new HashMap<>();
+        Map<String, Map<String, Double>> conc = latestConcByStation(stationIds, seen);
+        List<StationAqiDto> out = new ArrayList<>(conc.size());
+        for (var e : conc.entrySet()) {
+            out.add(toResult(e.getKey(), aqiService.compute(e.getValue()),
+                    seen.get(e.getKey()), now, "latest"));
         }
         return out;
     }
 
-    /** CPCB-method basis: trailing 24h mean per pollutant (8h for CO/O3) with completeness gating. */
+    /**
+     * CPCB-method basis: trailing 24h mean per pollutant (8h for CO/O3) with completeness gating.
+     * A station that doesn't yet have enough hours for a valid averaged AQI falls back to its
+     * latest single readings (basis {@code latest-fallback}), so a real number is still served
+     * while history accumulates.
+     */
     private List<StationAqiDto> averagedStations(List<String> stationIds, Instant now) {
         Map<String, Integer> avgHours = avgHoursByPollutant();
-        Map<String, List<WindowedAvgRow>> byStation = new LinkedHashMap<>();
+        Map<String, List<WindowedAvgRow>> avgByStation = new LinkedHashMap<>();
         for (WindowedAvgRow r : measurements.trailingAverages(stationIds, now, REJECT_MASK)) {
-            byStation.computeIfAbsent(r.stationId(), k -> new ArrayList<>()).add(r);
+            avgByStation.computeIfAbsent(r.stationId(), k -> new ArrayList<>()).add(r);
         }
-        List<StationAqiDto> out = new ArrayList<>(byStation.size());
-        for (var e : byStation.entrySet()) {
+        Map<String, Instant> latestSeen = new HashMap<>();
+        Map<String, Map<String, Double>> latestConc = latestConcByStation(stationIds, latestSeen);
+
+        Set<String> ids = new LinkedHashSet<>();
+        ids.addAll(avgByStation.keySet());
+        ids.addAll(latestConc.keySet());
+
+        List<StationAqiDto> out = new ArrayList<>(ids.size());
+        for (String id : ids) {
             Map<String, Double> conc = new HashMap<>();
             Instant seen = null;
-            for (WindowedAvgRow r : e.getValue()) {
+            for (WindowedAvgRow r : avgByStation.getOrDefault(id, List.of())) {
                 boolean shortWindow = avgHours.getOrDefault(r.pollutant(), 24) <= 8;
                 Double mean = shortWindow
                         ? (r.cnt8() >= MIN_HOURS_8 ? r.avg8() : null)
@@ -198,15 +201,34 @@ public class AqiController {
                     }
                 }
             }
-            out.add(toResult(e.getKey(), conc, seen, now, "avg"));
+            AqiCalculator.Result res = aqiService.compute(conc);
+            if (res.valid()) {
+                out.add(toResult(id, res, seen, now, "avg"));
+            } else {
+                Map<String, Double> lc = latestConc.getOrDefault(id, Map.of());
+                out.add(toResult(id, aqiService.compute(lc), latestSeen.get(id), now, "latest-fallback"));
+            }
         }
         return out;
     }
 
-    /** Builds the DTO from a pollutant→concentration map via the shared CPCB calculator. */
-    private StationAqiDto toResult(String stationId, Map<String, Double> conc, Instant seen,
+    /** Latest valid reading per pollutant for each station; records the most-recent timestamp. */
+    private Map<String, Map<String, Double>> latestConcByStation(List<String> stationIds,
+                                                                 Map<String, Instant> seenOut) {
+        Map<String, Map<String, Double>> out = new LinkedHashMap<>();
+        for (LatestRow r : measurements.latestForStations(stationIds)) {
+            if (r.value() == null || (r.qcFlags() & REJECT_MASK) != 0) {
+                continue;
+            }
+            out.computeIfAbsent(r.stationId(), k -> new HashMap<>()).put(r.pollutant(), r.value());
+            seenOut.merge(r.stationId(), r.intervalStart(), (a, b) -> b.isAfter(a) ? b : a);
+        }
+        return out;
+    }
+
+    /** Builds the DTO from an already-computed AQI result. */
+    private StationAqiDto toResult(String stationId, AqiCalculator.Result res, Instant seen,
                                    Instant now, String basis) {
-        AqiCalculator.Result res = aqiService.compute(conc);
         Long age = seen == null ? null : Duration.between(seen, now).toMinutes();
         String measuredAt = seen == null ? null : TimeUtil.toIstIso(seen);
         Map<String, Integer> sub = res.subIndices().isEmpty() ? null : res.subIndices();
