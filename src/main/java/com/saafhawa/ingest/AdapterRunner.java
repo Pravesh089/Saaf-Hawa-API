@@ -1,7 +1,7 @@
 package com.saafhawa.ingest;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.saafhawa.aqi.CityDailyAqiRepository;
+import com.saafhawa.aqi.CityBulletinWriter;
 import com.saafhawa.catalog.CatalogService;
 import com.saafhawa.catalog.Pollutant;
 import com.saafhawa.catalog.PollutantRepository;
@@ -10,7 +10,6 @@ import com.saafhawa.common.AlertSink;
 import com.saafhawa.common.AppProperties;
 import com.saafhawa.ingest.archive.RawArchiveService;
 import com.saafhawa.ingest.spi.CanonicalMeasurement;
-import com.saafhawa.ingest.spi.CityBulletinRow;
 import com.saafhawa.ingest.spi.IngestionWindow;
 import com.saafhawa.ingest.spi.ParseResult;
 import com.saafhawa.ingest.spi.RawPayload;
@@ -42,7 +41,7 @@ public class AdapterRunner {
     private final PollutantRepository pollutants;
     private final QcPipeline qc;
     private final MeasurementRepository measurements;
-    private final CityDailyAqiRepository cityDailyAqi;
+    private final CityBulletinWriter cityBulletins;
     private final IngestionRunRepository runs;
     private final AlertSink alerts;
     private final AppProperties props;
@@ -51,7 +50,7 @@ public class AdapterRunner {
 
     public AdapterRunner(RawArchiveService archive, CatalogService catalog,
                          PollutantRepository pollutants, QcPipeline qc,
-                         MeasurementRepository measurements, CityDailyAqiRepository cityDailyAqi,
+                         MeasurementRepository measurements, CityBulletinWriter cityBulletins,
                          IngestionRunRepository runs, AlertSink alerts, AppProperties props,
                          ObjectMapper objectMapper, MeterRegistry metrics) {
         this.archive = archive;
@@ -59,7 +58,7 @@ public class AdapterRunner {
         this.pollutants = pollutants;
         this.qc = qc;
         this.measurements = measurements;
-        this.cityDailyAqi = cityDailyAqi;
+        this.cityBulletins = cityBulletins;
         this.runs = runs;
         this.alerts = alerts;
         this.props = props;
@@ -100,10 +99,8 @@ public class AdapterRunner {
                     duplicate++;
                 }
             }
-            for (CityBulletinRow c : parsed.cityBulletins()) {
-                cityDailyAqi.upsert(c.city(), c.state(), c.aqiDate(), c.aqi(), c.prominentPollutant(),
-                        source, ref);
-                inserted++;
+            if (!parsed.cityBulletins().isEmpty()) {
+                inserted += cityBulletins.upsertAll(parsed.cityBulletins(), source, ref);
             }
             run.setInserted(inserted);
             run.setDuplicate(duplicate);

@@ -64,5 +64,11 @@ saafhawa:
     urbanemissions:
       enabled: ${URBANEMISSIONS_ENABLED:true}
       base-url: ${URBANEMISSIONS_BASE_URL:https://raw.githubusercontent.com/urbanemissionsinfo/AQI_bulletins/main/data/Processed}
-      start-year: ${URBANEMISSIONS_START_YEAR:2015}
+      # Full back-catalogue (2015-2024), fetched only for an explicit historical backfill.
+      history-files:
+        - AllIndiaBulletins_Master_2024.csv
+      # Current-year file(s) the weekly refresh keeps topped up.
+      current-files:
+        - AllIndiaBulletins_Master2025.csv
+        - AllIndiaBulletins_2025.csv
       cron: ${URBANEMISSIONS_CRON:0 0 3 * * MON}
