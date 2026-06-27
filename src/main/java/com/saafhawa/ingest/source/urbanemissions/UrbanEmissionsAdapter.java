@@ -13,14 +13,19 @@ import reactor.util.retry.Retry;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
  * Backfills city-level daily AQI from the urbanemissions.info community archive of CPCB daily
- * bulletins (§5.2, verification-log V6). The upstream repo is a sporadically-updated historical
- * dump per calendar year, not a live feed — current AQI is served instead by
- * {@code /v1/aqi/stations}; this adapter only fills in city-bulletin history. Years with no
- * published file are skipped rather than failing the whole run.
+ * bulletins (§5.2, verification-log V6). The upstream is a sporadically-updated set of whole-file
+ * CSV dumps (not a live, date-queryable feed), so a run fetches whole files and relies on the
+ * idempotent upsert for dedup; current AQI is served instead by {@code /v1/aqi/stations}.
+ *
+ * <p>To keep the weekly refresh cheap, the large historical back-catalogue is fetched only when the
+ * requested window starts before the current year (i.e. an explicit backfill); the scheduled job,
+ * which asks for the current year, pulls just the current-year file(s). Missing files are skipped
+ * with a warning rather than failing the whole run.
  */
 @Component
 public class UrbanEmissionsAdapter implements SourceAdapter {
@@ -45,43 +50,45 @@ public class UrbanEmissionsAdapter implements SourceAdapter {
 
     @Override
     public RawPayload fetch(IngestionWindow window) throws Exception {
-        int fromYear = Math.max(props.startYear(), window.from().atZone(ZoneOffset.UTC).getYear());
-        int toYear = window.to().atZone(ZoneOffset.UTC).getYear();
+        int currentYear = window.to().atZone(ZoneOffset.UTC).getYear();
+        int fromYear = window.from().atZone(ZoneOffset.UTC).getYear();
+        boolean includeHistory = fromYear < currentYear;
+
+        List<String> files = new ArrayList<>();
+        if (includeHistory) {
+            files.addAll(props.historyFiles());
+        }
+        files.addAll(props.currentFiles());
+
+        // Concatenate fetched files; each retains its own header so the parser re-syncs schemas.
         StringBuilder combined = new StringBuilder();
-        boolean headerWritten = false;
-        int yearsFetched = 0;
-        for (int year = fromYear; year <= toYear; year++) {
-            String csv = fetchYear(year);
+        int filesFetched = 0;
+        for (String file : files) {
+            String csv = fetchFile(file);
             if (csv == null || csv.isBlank()) {
                 continue;
             }
-            List<String> lines = csv.lines().toList();
-            if (lines.isEmpty()) {
-                continue;
+            combined.append(csv);
+            if (csv.charAt(csv.length() - 1) != '\n') {
+                combined.append('\n');
             }
-            if (!headerWritten) {
-                combined.append(lines.get(0)).append('\n');
-                headerWritten = true;
-            }
-            for (int i = 1; i < lines.size(); i++) {
-                combined.append(lines.get(i)).append('\n');
-            }
-            yearsFetched++;
+            filesFetched++;
         }
-        log.info("Fetched {} urbanemissions bulletin file(s) for years {}-{}", yearsFetched, fromYear, toYear);
+        log.info("Fetched {} of {} urbanemissions bulletin file(s) (history={})",
+                filesFetched, files.size(), includeHistory);
         return new RawPayload("text/csv", combined.toString().getBytes(StandardCharsets.UTF_8));
     }
 
-    private String fetchYear(int year) {
-        String uri = props.baseUrl() + "/AllIndiaBulletins_" + year + ".csv";
+    private String fetchFile(String file) {
+        String uri = props.baseUrl() + "/" + file;
         try {
             return webClient.get().uri(uri)
                     .retrieve()
                     .bodyToMono(String.class)
                     .retryWhen(Retry.backoff(2, Duration.ofSeconds(2)))
-                    .block(Duration.ofSeconds(60));
+                    .block(Duration.ofSeconds(120));
         } catch (Exception e) {
-            log.warn("No urbanemissions bulletin file for year {} ({})", year, e.getMessage());
+            log.warn("Skipping urbanemissions file {} ({})", file, e.getMessage());
             return null;
         }
     }
